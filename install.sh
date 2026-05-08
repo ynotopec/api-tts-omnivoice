@@ -41,7 +41,7 @@ echo "==> Upgrading packaging tools..."
 uv pip install -U pip setuptools wheel packaging ninja
 
 echo "==> Removing possibly incompatible versions..."
-uv pip uninstall -y vllm vllm-omni || true
+uv pip uninstall vllm vllm-omni || true
 
 # Detect CUDA version and select appropriate wheel
 CUDART_PATH="$(ldconfig -p 2>/dev/null | grep 'libcudart.so.13' | head -1 | awk '{print $NF}')"
