@@ -33,8 +33,20 @@ export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
 export PYTHONUNBUFFERED=1
 
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+  echo "ERROR: Virtual environment not found at $VENV_DIR" >&2
+  echo "Run ./install.sh successfully first, or set VENV_DIR to the correct environment." >&2
+  exit 1
+fi
+
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
+
+if ! command -v vllm >/dev/null 2>&1; then
+  echo "ERROR: vllm CLI not found in the activated virtual environment: $VENV_DIR" >&2
+  echo "The install likely did not complete. Run ./install.sh and check for errors before starting the API." >&2
+  exit 127
+fi
 
 ARGS=(
   serve "$MODEL_ID"

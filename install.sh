@@ -44,7 +44,7 @@ echo "==> Removing possibly incompatible versions..."
 uv pip uninstall vllm vllm-omni || true
 
 # Detect CUDA version and select appropriate wheel
-CUDART_PATH="$(ldconfig -p 2>/dev/null | grep 'libcudart.so.13' | head -1 | awk '{print $NF}')"
+CUDART_PATH="$(ldconfig -p 2>/dev/null | awk '/libcudart[.]so[.]13/ {print $NF; exit}' || true)"
 if [ -n "$CUDART_PATH" ] && [ -f "$CUDART_PATH" ]; then
   CUDA_TAG="cu130"
   echo "==> Detected CUDA 13.x, will install vLLM +cu130 wheel"
@@ -136,6 +136,12 @@ except Exception as e:
 
 print("OK: install verification complete")
 PY
+
+if ! command -v vllm >/dev/null 2>&1; then
+  echo "ERROR: vLLM import succeeded, but the vllm CLI was not found in $VENV_DIR/bin" >&2
+  exit 1
+fi
+echo "OK: vLLM CLI: $(command -v vllm)"
 
 echo
 echo "✅ Install OK"
