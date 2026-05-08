@@ -3,6 +3,14 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="$(basename "$APP_DIR")"
+
+if [[ -f "$APP_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$APP_DIR/.env"
+  set +a
+fi
+
 VENV_DIR="${VENV_DIR:-$HOME/venv/$APP_NAME}"
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
@@ -12,12 +20,14 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 # - le package PyPI peut être désaligné et provoquer :
 #   ModuleNotFoundError: No module named 'vllm.inputs.data'
 VLLM_VERSION="${VLLM_VERSION:-0.19.0}"
+VLLM_CUDA_TAG="${VLLM_CUDA_TAG:-auto}"
 VLLM_OMNI_GIT_REF="${VLLM_OMNI_GIT_REF:-v0.19.0rc1}"
 
 echo "==> App dir:        $APP_DIR"
 echo "==> Venv:           $VENV_DIR"
 echo "==> Python:         $PYTHON_VERSION"
 echo "==> vLLM:           $VLLM_VERSION"
+echo "==> vLLM CUDA tag:  $VLLM_CUDA_TAG"
 echo "==> vLLM-Omni ref:  $VLLM_OMNI_GIT_REF"
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -43,18 +53,59 @@ uv pip install -U pip setuptools wheel packaging ninja
 echo "==> Removing possibly incompatible versions..."
 uv pip uninstall vllm vllm-omni || true
 
-# Detect CUDA version and select appropriate wheel
-CUDART_PATH="$(ldconfig -p 2>/dev/null | awk '/libcudart[.]so[.]13/ {print $NF; exit}' || true)"
-if [ -n "$CUDART_PATH" ] && [ -f "$CUDART_PATH" ]; then
-  CUDA_TAG="cu130"
-  echo "==> Detected CUDA 13.x, will install vLLM +cu130 wheel"
+detect_vllm_cuda_tag() {
+  if ldconfig -p 2>/dev/null | awk '/libcudart[.]so[.]13/ {found=1} END {exit !found}'; then
+    echo "cu130"
+    return
+  fi
+
+  local cuda_dir
+  for cuda_dir in /usr/local/cuda /usr/local/cuda-*; do
+    [[ -e "$cuda_dir" ]] || continue
+    if [[ -f "$cuda_dir/lib64/libcudart.so.13" || -f "$cuda_dir/targets/x86_64-linux/lib/libcudart.so.13" ]]; then
+      echo "cu130"
+      return
+    fi
+    if [[ -f "$cuda_dir/version.txt" ]] && awk '/CUDA Version 13|release 13[.]/ {found=1} END {exit !found}' "$cuda_dir/version.txt"; then
+      echo "cu130"
+      return
+    fi
+  done
+
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi 2>/dev/null | awk -F'CUDA Version: ' '/CUDA Version:/ {split($2, v, "."); if (v[1] + 0 >= 13) found=1} END {exit !found}'; then
+    echo "cu130"
+    return
+  fi
+
+  if command -v nvcc >/dev/null 2>&1 && nvcc --version 2>/dev/null | awk '/release 13[.]/ {found=1} END {exit !found}'; then
+    echo "cu130"
+    return
+  fi
+
+  echo "default"
+}
+
+case "$VLLM_CUDA_TAG" in
+  auto)
+    CUDA_TAG="$(detect_vllm_cuda_tag)"
+    ;;
+  default|cu130)
+    CUDA_TAG="$VLLM_CUDA_TAG"
+    ;;
+  *)
+    echo "ERROR: VLLM_CUDA_TAG must be one of: auto, default, cu130" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$CUDA_TAG" = "cu130" ]; then
+  echo "==> Using vLLM +cu130 wheel for CUDA 13.x"
 else
-  CUDA_TAG="auto"
-  echo "==> No CUDA 13 detected, installing vLLM with default backend"
+  echo "==> Using default vLLM backend selection"
 fi
 
 echo "==> Installing vLLM pinned version..."
-if [ "$CUDA_TAG" = "auto" ]; then
+if [ "$CUDA_TAG" = "default" ]; then
   uv pip install --reinstall "vllm==${VLLM_VERSION}" --torch-backend=auto
 else
   CPU_ARCH="$(uname -m)"
@@ -124,6 +175,9 @@ try:
     print("vLLM-Omni path:", vllm_omni.__file__)
 except Exception as e:
     print("ERROR: vLLM-Omni import failed:", repr(e))
+    if "libcudart.so.12" in str(e):
+        print("HINT: A CUDA 12 vLLM wheel was installed without CUDA 12 runtime libraries.")
+        print("HINT: On CUDA 13 systems, rerun with VLLM_CUDA_TAG=cu130 ./install.sh")
 
     try:
         import vllm.inputs

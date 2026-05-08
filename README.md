@@ -41,6 +41,21 @@ chmod +x install.sh run.sh
 source ./run.sh 0.0.0.0 8091
 ```
 
+
+### CUDA 13 / `libcudart.so.12` install failures
+
+On CUDA 13 systems, `install.sh` auto-selects the vLLM `+cu130` wheel when it can detect CUDA 13 from `libcudart`, `/usr/local/cuda*`, `nvidia-smi`, or `nvcc`. If your machine still installs a default CUDA 12 vLLM wheel and verification fails with `libcudart.so.12: cannot open shared object file`, force the CUDA 13 wheel before reinstalling:
+
+```bash
+VLLM_CUDA_TAG=cu130 ./install.sh
+```
+
+You can also put this in `.env`:
+
+```bash
+VLLM_CUDA_TAG=cu130
+```
+
 ## Test health / models
 
 ```bash
