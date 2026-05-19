@@ -41,6 +41,31 @@ chmod +x install.sh run.sh
 source ./run.sh 0.0.0.0 8091
 ```
 
+### Static voice-clone mode (hardcoded, non-API)
+
+If you want a single cloned voice without exposing reference-audio upload in
+the API, you can enable a fixed local voice profile at startup.
+
+1) Put your reference WAV on disk (example: `/opt/voices/default.wav`).
+
+2) Set in `.env`:
+
+```bash
+CLONE_MODE=1
+REFERENCE_AUDIO_PATH=/opt/voices/default.wav
+```
+
+3) Start as usual:
+
+```bash
+source ./run.sh 0.0.0.0 8091
+```
+
+Notes:
+- This keeps `/v1/audio/speech` unchanged.
+- `run.sh` validates the clone env vars and file path before server start.
+- Actual speaker conditioning depends on your runtime/model stack support.
+
 
 ### CUDA 13 / `libcudart.so.12` install failures
 

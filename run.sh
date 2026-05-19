@@ -19,6 +19,11 @@ VENV_DIR="${VENV_DIR:-$HOME/venv/$APP_NAME}"
 MODEL_ID="${MODEL_ID:-k2-fsa/OmniVoice}"
 API_KEY="${API_KEY:-}"
 
+# Static voice-clone mode (non-API): when enabled, a local reference audio
+# is loaded by custom runtimes that support speaker conditioning.
+CLONE_MODE="${CLONE_MODE:-0}"
+REFERENCE_AUDIO_PATH="${REFERENCE_AUDIO_PATH:-}"
+
 HF_HOME="${HF_HOME:-$APP_DIR/.cache/huggingface}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
@@ -32,6 +37,20 @@ export CUDA_VISIBLE_DEVICES
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
 export PYTHONUNBUFFERED=1
+export CLONE_MODE
+export REFERENCE_AUDIO_PATH
+
+if [[ "$CLONE_MODE" == "1" || "$CLONE_MODE" == "true" ]]; then
+  if [[ -z "$REFERENCE_AUDIO_PATH" ]]; then
+    echo "ERROR: CLONE_MODE is enabled but REFERENCE_AUDIO_PATH is empty." >&2
+    echo "Set REFERENCE_AUDIO_PATH to a local WAV file (e.g. /opt/voices/default.wav)." >&2
+    exit 1
+  fi
+  if [[ ! -f "$REFERENCE_AUDIO_PATH" ]]; then
+    echo "ERROR: REFERENCE_AUDIO_PATH does not exist: $REFERENCE_AUDIO_PATH" >&2
+    exit 1
+  fi
+fi
 
 if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
   echo "ERROR: Virtual environment not found at $VENV_DIR" >&2
@@ -69,6 +88,11 @@ fi
 echo "==> Starting OmniVoice OpenAI-compatible API"
 echo "    URL:   http://${HOST}:${PORT}/v1/audio/speech"
 echo "    Model: $MODEL_ID"
+if [[ "$CLONE_MODE" == "1" || "$CLONE_MODE" == "true" ]]; then
+  echo "    Clone: static reference enabled ($REFERENCE_AUDIO_PATH)"
+else
+  echo "    Clone: disabled"
+fi
 echo "    Venv:  $VENV_DIR"
 echo "    GPU:   CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 echo
